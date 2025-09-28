@@ -1,0 +1,15 @@
+services:
+
+  rust:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: rust-image # これはDev Containerでは省略可能
+    container_name: rust-container
+    volumes:
+      - .:/rust-docker
+    working_dir: /rust-docker
+    # DevContainerの接続に必要な設定を再有効化
+    command: /bin/sh
+    stdin_open: true # コンテナの標準入力を開いたままにする
+    tty: true # 端末を割り当てる

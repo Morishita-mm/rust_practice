@@ -144,6 +144,12 @@ fn fox_b() -> Result<()> {
 
 // --------------------------------------------------
 #[test]
+fn fox_E() -> Result<()> {
+    run(&["-E", FOX], "tests/expected/fox.txt.E.out")
+}
+
+// --------------------------------------------------
+#[test]
 fn spiders() -> Result<()> {
     run(&[SPIDERS], "tests/expected/spiders.txt.out")
 }
@@ -165,6 +171,12 @@ fn spiders_b() -> Result<()> {
 
 // --------------------------------------------------
 #[test]
+fn spiders_E() -> Result<()> {
+    run(&["-E", SPIDERS], "tests/expected/spiders.txt.E.out")
+}
+
+// --------------------------------------------------
+#[test]
 fn bustle() -> Result<()> {
     run(&[BUSTLE], "tests/expected/the-bustle.txt.out")
 }
@@ -179,6 +191,12 @@ fn bustle_n() -> Result<()> {
 #[test]
 fn bustle_b() -> Result<()> {
     run(&["-b", BUSTLE], "tests/expected/the-bustle.txt.b.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn bustle_E() -> Result<()> {
+    run(&["-E", BUSTLE], "tests/expected/the-bustle.txt.E.out")
 }
 
 // --------------------------------------------------
@@ -203,6 +221,12 @@ fn sunrise_b() -> Result<()> {
 #[test]
 fn sunrise_s() -> Result<()> {
     run(&["-s", SUNRISE], "tests/expected/sunrise-summit.txt.s.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn sunrise_E() -> Result<()> {
+    run(&["-E", SUNRISE], "tests/expected/sunrise-summit.txt.E.out")
 }
 
 // --------------------------------------------------
@@ -253,6 +277,15 @@ fn all_s() -> Result<()> {
     run(
         &[FOX, SPIDERS, BUSTLE, SUNRISE, "-s"],
         "tests/expected/all.s.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn all_E() -> Result<()> {
+    run(
+        &[FOX, SPIDERS, BUSTLE, SUNRISE, "-E"],
+        "tests/expected/all.E.out",
     )
 }
 

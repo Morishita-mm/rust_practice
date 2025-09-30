@@ -17,6 +17,8 @@ pub struct Config {
     number_nonblank_lines: bool,
     // 連続した空白行を1行にまとめるかどうかを示す真理値
     squeeze_blank_lines: bool,
+    // 各行の最後に$を挿入するかどうかを示す真理値
+    show_ends: bool,
 }
 
 // ジェネリックを用いて任意の型に対するOKを返せるように型エイリアスを作成
@@ -26,6 +28,8 @@ type MyResult<T> = Result<T, Box<dyn Error>>;
 // デフォルトではモジュール内の全ての変数と関数はプライベート
 pub fn run(config: Config) -> MyResult<()> {
     let mut cur_row: u32 = 1;
+    let mut end_marker = "";
+    
     for filename in config.files {
         match open(&filename) {
             Err(err) => eprintln!("Failed to open {}: {}", filename, err),
@@ -50,7 +54,10 @@ pub fn run(config: Config) -> MyResult<()> {
                         print!("{:>6}\t", cur_row);
                         cur_row += 1;
                     };
-                    println!("{}", line);
+
+                    // -Eのロジック
+                    if config.show_ends { end_marker = "$" } else { end_marker = "" }
+                    println!("{line}{end_marker}");
                 }
             }
         }
@@ -94,6 +101,13 @@ pub fn get_args() -> MyResult<Config> {
                 .help("supress repeated empty output lines")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("show_ends")
+                .short('E')
+                .long("show-ends")
+                .help("display $ at end of esach line")
+                .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     Ok(Config {
@@ -105,6 +119,7 @@ pub fn get_args() -> MyResult<Config> {
         number_lines: matches.get_flag("number_lines"),
         number_nonblank_lines: matches.get_flag("number_nonblank"),
         squeeze_blank_lines: matches.get_flag("squeeze_blank_lines"),
+        show_ends: matches.get_flag("show_ends"),
     })
 }
 

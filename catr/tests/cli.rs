@@ -10,6 +10,7 @@ const EMPTY: &str = "tests/inputs/empty.txt";
 const FOX: &str = "tests/inputs/fox.txt";
 const SPIDERS: &str = "tests/inputs/spiders.txt";
 const BUSTLE: &str = "tests/inputs/the-bustle.txt";
+const SUNRISE: &str = "tests/inputs/sunrise-summit.txt";
 
 // --------------------------------------------------
 #[test]
@@ -182,18 +183,93 @@ fn bustle_b() -> Result<()> {
 
 // --------------------------------------------------
 #[test]
+fn sunrise() -> Result<()> {
+    run(&[SUNRISE], "tests/expected/sunrise-summit.txt.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn sunrise_n() -> Result<()> {
+    run(&["-n", SUNRISE], "tests/expected/sunrise-summit.txt.n.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn sunrise_b() -> Result<()> {
+    run(&["-b", SUNRISE], "tests/expected/sunrise-summit.txt.b.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn sunrise_s() -> Result<()> {
+    run(&["-s", SUNRISE], "tests/expected/sunrise-summit.txt.s.out")
+}
+
+// --------------------------------------------------
+#[test]
+fn sunrise_ns() -> Result<()> {
+    run(
+        &["-n", "-s", SUNRISE],
+        "tests/expected/sunrise-summit.txt.ns.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn sunrise_bs() -> Result<()> {
+    run(
+        &["-b", "-s", SUNRISE],
+        "tests/expected/sunrise-summit.txt.bs.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
 fn all() -> Result<()> {
-    run(&[FOX, SPIDERS, BUSTLE], "tests/expected/all.out")
+    run(&[FOX, SPIDERS, BUSTLE, SUNRISE], "tests/expected/all.out")
 }
 
 // --------------------------------------------------
 #[test]
 fn all_n() -> Result<()> {
-    run(&[FOX, SPIDERS, BUSTLE, "-n"], "tests/expected/all.n.out")
+    run(
+        &[FOX, SPIDERS, BUSTLE, SUNRISE, "-n"],
+        "tests/expected/all.n.out",
+    )
 }
 
 // --------------------------------------------------
 #[test]
 fn all_b() -> Result<()> {
-    run(&[FOX, SPIDERS, BUSTLE, "-b"], "tests/expected/all.b.out")
+    run(
+        &[FOX, SPIDERS, BUSTLE, SUNRISE, "-b"],
+        "tests/expected/all.b.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn all_s() -> Result<()> {
+    run(
+        &[FOX, SPIDERS, BUSTLE, SUNRISE, "-s"],
+        "tests/expected/all.s.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn all_ns() -> Result<()> {
+    run(
+        &[FOX, SPIDERS, BUSTLE, SUNRISE, "-n", "-s"],
+        "tests/expected/all.ns.out",
+    )
+}
+
+// --------------------------------------------------
+#[test]
+fn all_bs() -> Result<()> {
+    run(
+        &[FOX, SPIDERS, BUSTLE, SUNRISE, "-b", "-s"],
+        "tests/expected/all.bs.out",
+    )
 }

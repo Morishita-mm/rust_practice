@@ -15,6 +15,8 @@ pub struct Config {
     number_lines: bool,
     // 空行以外に行番号を表示するかどうかを示す真理値
     number_nonblank_lines: bool,
+    // 連続した空白行を1行にまとめるかどうかを示す真理値
+    squeeze_blank_lines: bool,
 }
 
 // ジェネリックを用いて任意の型に対するOKを返せるように型エイリアスを作成
@@ -23,14 +25,27 @@ type MyResult<T> = Result<T, Box<dyn Error>>;
 // パブリック関数の定義
 // デフォルトではモジュール内の全ての変数と関数はプライベート
 pub fn run(config: Config) -> MyResult<()> {
+    let mut cur_row: u32 = 1;
     for filename in config.files {
         match open(&filename) {
             Err(err) => eprintln!("Failed to open {}: {}", filename, err),
             Ok(file) => {
-                let mut cur_row : u32 = 1;
+                let mut previous_line_was_blank = false;
+
                 // file.lines : 読み込んだファイルの行のいてレーターを返す
                 for line in file.lines() {
                     let line = line?;
+
+                    // -s のロジック
+                    if config.squeeze_blank_lines {
+                        match (previous_line_was_blank, line.is_empty()) {
+                            (true, true) => continue,
+                            (false, true) => previous_line_was_blank = true,
+                            (_, _) => previous_line_was_blank = false,
+                        }
+                    }
+
+                    // -nと-bのロジック
                     if (config.number_nonblank_lines && !line.is_empty()) || config.number_lines {
                         print!("{:>6}\t", cur_row);
                         cur_row += 1;
@@ -72,6 +87,13 @@ pub fn get_args() -> MyResult<Config> {
                 .conflicts_with("number_lines")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("squeeze_blank_lines")
+                .short('s')
+                .long("squeeze-blank")
+                .help("supress repeated empty output lines")
+                .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     Ok(Config {
@@ -82,6 +104,7 @@ pub fn get_args() -> MyResult<Config> {
             .collect::<Vec<_>>(),
         number_lines: matches.get_flag("number_lines"),
         number_nonblank_lines: matches.get_flag("number_nonblank"),
+        squeeze_blank_lines: matches.get_flag("squeeze_blank_lines"),
     })
 }
 

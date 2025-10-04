@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use pretty_assertions::assert_eq;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{Rng, distributions::Alphanumeric};
 use std::fs;
 use tempfile::NamedTempFile;
 
@@ -178,7 +178,7 @@ fn run_outfile(test: &Test) -> Result<()> {
         .args([test.input, outpath])
         .assert()
         .success()
-        .stdout("");
+        .stdout(""); // 出力ファイル指定時はstdoutは空
     let contents = fs::read_to_string(outpath)?;
     assert_eq!(&expected, &contents);
 
@@ -194,7 +194,7 @@ fn run_outfile_count(test: &Test) -> Result<()> {
         .args([test.input, outpath, "--count"])
         .assert()
         .success()
-        .stdout("");
+        .stdout(""); // 出力ファイル指定時はstdoutは空
 
     let expected = fs::read_to_string(test.out_count)?;
     let contents = fs::read_to_string(outpath)?;
@@ -210,10 +210,10 @@ fn run_stdin_outfile_count(test: &Test) -> Result<()> {
     let outpath = &outfile.path().to_str().unwrap();
 
     Command::cargo_bin(PRG)?
-        .args(["-", outpath, "-c"])
+        .args(["-", outpath, "-c"]) // 標準入力は "-" を明示
         .write_stdin(input)
         .assert()
-        .stdout("");
+        .stdout(""); // 出力ファイル指定時はstdoutは空
 
     let expected = fs::read_to_string(test.out_count)?;
     let contents = fs::read_to_string(outpath)?;

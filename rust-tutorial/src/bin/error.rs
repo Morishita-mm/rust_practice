@@ -13,23 +13,15 @@ fn main() {
     let f = match f {
         Ok(file) => file,
         // エラーの内容が、ファイルが存在しないという形式のエラーだった場合、ファイルを作成する
-        Err(ref error) if error.kind() == ErrorKind::NotFound => {
-            match File::create("hello.txt") {
-                Ok(fc) => fc,
-                Err(e) => {
-                    panic!(
-                        "Tried to create file but there was a problem: {:?}",
-                        e
-                    )
-                },
+        Err(ref error) if error.kind() == ErrorKind::NotFound => match File::create("hello.txt") {
+            Ok(fc) => fc,
+            Err(e) => {
+                panic!("Tried to create file but there was a problem: {:?}", e)
             }
         },
         Err(error) => {
-            panic!(
-                "There wa a problem opening the file: {:?}",
-                error
-            )
-        },
+            panic!("There wa a problem opening the file: {:?}", error)
+        }
     };
 
     // unwrap() : Resultをpanicに変換する（中身がエラーだった場合、パニックを起こす、エラーハンドリングしない）

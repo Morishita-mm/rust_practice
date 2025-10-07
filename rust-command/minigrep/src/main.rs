@@ -5,8 +5,8 @@ use minigrep::Config;
 
 fn main() {
     // コマンドラインから引数を受け取る
-    let args: Vec<String> = env::args().collect();
-    let config = Config::new(&args).unwrap_or_else(|err| {
+    let args = env::args();
+    let config = Config::new(args).unwrap_or_else(|err| {
         println!("Problem parsing arguments: {}", err);
         process::exit(1);
     });

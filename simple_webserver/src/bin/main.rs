@@ -17,7 +17,7 @@ fn main() {
 
     // incoming: 一連のストリームを与えるイテレータを返す
     // 単独のストリームがクライアント・サーバ間の開かれた接続を表す
-    for stream in listner.incoming() {
+    for stream in listner.incoming().take(2) {
         let stream = stream.unwrap();
 
         // リクエストが来る旅に無制限にスレッドを生成してしまう
@@ -25,6 +25,8 @@ fn main() {
             handle_connection(stream);
         });
     }
+
+    println!("Shutting down.");
 }
 
 fn handle_connection(mut stream: TcpStream) {

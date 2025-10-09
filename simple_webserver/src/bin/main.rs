@@ -1,19 +1,29 @@
+extern crate simple_webserver;
+use simple_webserver::ThreadPool;
+
 use std::{
     fs::File,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
+    thread,
 };
 
 fn main() {
     // bind: 新しいTcpListenerインスタンスを返す（リッスンすべきポートに接続する→「ポートに束縛する」ことからbind）
     let listner = TcpListener::bind("127.0.0.1:7878").unwrap();
 
+    // thread::spawnの代わりに、有限個のスレッドを作成できる様にする
+    let pool = ThreadPool::new(4);
+
     // incoming: 一連のストリームを与えるイテレータを返す
     // 単独のストリームがクライアント・サーバ間の開かれた接続を表す
     for stream in listner.incoming() {
         let stream = stream.unwrap();
 
-        handle_connection(stream);
+        // リクエストが来る旅に無制限にスレッドを生成してしまう
+        pool.execute(|| {
+            handle_connection(stream);
+        });
     }
 }
 

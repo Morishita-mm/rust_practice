@@ -67,7 +67,7 @@ fn format_file_name(expected_file: &str) -> Cow<str> {
 
 // --------------------------------------------------
 #[cfg(not(windows))]
-fn format_file_name(expected_file: &str) -> Cow<str> {
+fn format_file_name(expected_file: &str) -> Cow<'_, str> {
     // Equivalent to: Cow::Borrowed(expected_file)
     expected_file.into()
 }

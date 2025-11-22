@@ -2,9 +2,10 @@ use crate::models::VoteRecord;
 use axum::async_trait;
 use sqlx::PgPool;
 
+#[cfg_attr(test, mockall::automock)]    // テストの際に自動的にモックを生成してくれる
 #[async_trait]
 pub trait VoteRepository: Send + Sync + 'static {
-    async fn create(&self, team_name: String) -> anyhow::Result<()>;
+    async fn create(&self, team_name: String) -> anyhow::Result<i32>;
     async fn find_all(&self) -> anyhow::Result<Vec<VoteRecord>>;
 }
 
@@ -21,16 +22,18 @@ impl VoteRepositoryForDb {
 
 #[async_trait]
 impl VoteRepository for VoteRepositoryForDb {
-    async fn create(&self, team_name: String) -> anyhow::Result<()> {
-        sqlx::query!(
+    async fn create(&self, team_name: String) -> anyhow::Result<i32> {
+        let new_count = sqlx::query_scalar!(
             "INSERT INTO votes (team_name, count) VALUES ($1, 1)
             ON CONFLICT (team_name)
-            DO UPDATE SET count = votes.count + 1",
+            DO UPDATE SET count = votes.count + 1
+            RETURNING count",
             team_name
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(())
+
+        Ok(new_count)
     }
 
     async fn find_all(&self) -> anyhow::Result<Vec<VoteRecord>> {

@@ -1,6 +1,7 @@
 mod handlers;
 mod models;
 mod repositories;
+mod actors;
 
 use axum::{
     Router,
@@ -10,7 +11,8 @@ use sqlx::{postgres::PgPoolOptions};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
 
-use crate::repositories::{VoteRepository, VoteRepositoryForDb};
+use crate::{models::AppState, repositories::{VoteRepository, VoteRepositoryForDb}};
+use crate::actors::VoteObserverActor;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,13 +27,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connected to Database!");
 
-    let repo = VoteRepositoryForDb::new(pool);
-    let app_state: Arc<dyn VoteRepository> = Arc::new(repo);
+    let (actor, observer_handle) = VoteObserverActor::new();
+    tokio::spawn(actor.run());
+
+    let repo_impl = VoteRepositoryForDb::new(pool);
+    let repo_arc: Arc<dyn VoteRepository> = Arc::new(repo_impl);
+
+    let state = AppState {
+        repo: repo_arc,
+        observer: observer_handle,
+    };
 
     let app = Router::new()
         .route("/vote", post(handlers::cast_vote)) // POST /vote -> cast_vote関数へマッピング
         .route("/votes", get(handlers::get_votes)) // GET /votes -> get_votes関数へマッピング
-        .with_state(app_state);
+        .with_state(state);
 
     let _addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;

@@ -1,5 +1,9 @@
+use std::convert::Infallible;
+
 use crate::models::{CreateVote, VoteRecord, AppState};
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State, http::StatusCode, response::{Sse, sse::Event}};
+use futures::Stream;
+use tokio::sync::broadcast;
 
 pub async fn cast_vote(
     State(state): State<AppState>,
@@ -17,14 +21,40 @@ pub async fn get_votes(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<VoteRecord>>, (StatusCode, String)> {
     let votes = state.repo
-        .find_all()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(Json(votes))
+    .find_all()
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+Ok(Json(votes))
+}
+
+pub async fn sse_handler(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut rx = state.tx.subscribe();
+    
+    let stream = async_stream::stream! {
+        loop {
+            match rx.recv().await {
+                Ok(vote_record) => {
+                    let json = serde_json::to_string(&vote_record).unwrap();
+                    yield Ok(Event::default().event("update").data(json));
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    break;
+                }
+            }
+        }
+    };
+    Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
 
 #[cfg(test)]
 mod tests {
+    use tokio::sync::broadcast;
+
     use super::*;
     use crate::{actors::VoteObserverActor, repositories::MockVoteRepository};
     use std::sync::Arc;
@@ -40,14 +70,17 @@ mod tests {
             .times(1) // 1回だけ呼ばれるはず
             .returning(|_| Ok(1)); // Okを返すようにセット
 
+        let (tx, _rx) = broadcast::channel(10);
+
         // DI
         // 本物のDB接続の代わりに、モックを渡す
         // ダミーのアクターハンドルを作成
-        let (_actor, observer_handle) = VoteObserverActor::new();
+        let (_actor, observer_handle) = VoteObserverActor::new(tx.clone());
 
         let state = AppState {
             repo: Arc::new(mock_repo),
             observer: observer_handle,
+            tx,
         };
 
         let payload = Json(CreateVote {

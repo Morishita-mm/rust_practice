@@ -1,21 +1,29 @@
-use tokio::sync::mpsc;
+use crate::models::VoteRecord;
+use tokio::sync::{broadcast, mpsc};
 
 // アクターが受け取るメッセージの型
 pub enum VoteMessage {
-    NewVote { team_name: String, current_count: i32 },
+    NewVote {
+        team_name: String,
+        current_count: i32,
+    },
 }
 
 // アクター本体
 pub struct VoteObserverActor {
     // メールボックス（受信機）
     receiver: mpsc::Receiver<VoteMessage>,
+    broadcaster: broadcast::Sender<VoteRecord>,
 }
 
 impl VoteObserverActor {
     // アクターの作成（メールボックスと送信機を返す）
-    pub fn new() -> (Self, VoteObserverHandle) {
-        let (tx, rx) = mpsc::channel(32);   // 容量32のメールボックス
-        let actor = Self { receiver: rx };
+    pub fn new(broadcaster: broadcast::Sender<VoteRecord>) -> (Self, VoteObserverHandle) {
+        let (tx, rx) = mpsc::channel(32); // 容量32のメールボックス
+        let actor = Self {
+            receiver: rx,
+            broadcaster,
+        };
         let handle = VoteObserverHandle { sender: tx };
         (actor, handle)
     }
@@ -24,8 +32,20 @@ impl VoteObserverActor {
         // メッセージが来るたびに処理を行う
         while let Some(msg) = self.receiver.recv().await {
             match msg {
-                VoteMessage::NewVote { team_name, current_count } => {
-                    println!("Actor: {}チームに票が入りました。（現在{}票)", team_name, current_count);
+                VoteMessage::NewVote {
+                    team_name,
+                    current_count,
+                } => {
+                    println!(
+                        "Actor: {}チームに票が入りました。（現在{}票)",
+                        team_name, current_count
+                    );
+
+                    let record = VoteRecord {
+                        team_name: team_name.clone(),
+                        count: current_count,
+                    };
+                    self.broadcaster.send(record).ok();
 
                     // 特定のロジック（イベント駆動）
                     if current_count >= 10 {
@@ -47,7 +67,7 @@ impl VoteObserverHandle {
     pub async fn notify_new_vote(&self, team_name: String, count: i32) {
         let msg = VoteMessage::NewVote {
             team_name,
-            current_count: count
+            current_count: count,
         };
         // エラー（アクターが死んでる場合）は今回は無視
         let _ = self.sender.send(msg).await;

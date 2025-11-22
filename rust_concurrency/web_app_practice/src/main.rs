@@ -9,7 +9,7 @@ use axum::{
 };
 use sqlx::{postgres::PgPoolOptions};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::signal;
+use tokio::{signal, sync::broadcast};
 
 use crate::{models::AppState, repositories::{VoteRepository, VoteRepositoryForDb}};
 use crate::actors::VoteObserverActor;
@@ -27,7 +27,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connected to Database!");
 
-    let (actor, observer_handle) = VoteObserverActor::new();
+    let (tx, _rx) = broadcast::channel(100);
+    
+    let (actor, observer_handle) = VoteObserverActor::new(tx.clone());
     tokio::spawn(actor.run());
 
     let repo_impl = VoteRepositoryForDb::new(pool);
@@ -36,11 +38,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         repo: repo_arc,
         observer: observer_handle,
+        tx,
     };
 
     let app = Router::new()
         .route("/vote", post(handlers::cast_vote)) // POST /vote -> cast_vote関数へマッピング
         .route("/votes", get(handlers::get_votes)) // GET /votes -> get_votes関数へマッピング
+        .route("/events", get(handlers::sse_handler))   // GET /events -> sse_handlerへマッピング
         .with_state(state);
 
     let _addr = SocketAddr::from(([0, 0, 0, 0], 8080));

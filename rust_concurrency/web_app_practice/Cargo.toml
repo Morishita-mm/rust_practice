@@ -1,0 +1,13 @@
+[package]
+name = "web_app_practice"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"                 # Webフレームワーク
+serde = { version = "1", features = ["derive"] } # データの変換(シリアライズ)
+serde_json = "1"             # JSONの読み書き
+tower-http = { version = "0.5", features = ["trace"] } # ログ出力などの便利機能
+tracing = "0.1"              # ログの仕組み
+tracing-subscriber = "0.3"   # ログの出力先設定

@@ -1,5 +1,7 @@
+use std::{collections::HashMap, time::Duration};
+
 use crate::models::VoteRecord;
-use tokio::sync::{broadcast, mpsc};
+use tokio::{sync::{broadcast, mpsc}, time::Instant};
 
 // アクターが受け取るメッセージの型
 pub enum VoteMessage {
@@ -14,6 +16,7 @@ pub struct VoteObserverActor {
     // メールボックス（受信機）
     receiver: mpsc::Receiver<VoteMessage>,
     broadcaster: broadcast::Sender<VoteRecord>,
+    history: HashMap<String, Vec<Instant>>,
 }
 
 impl VoteObserverActor {
@@ -23,6 +26,7 @@ impl VoteObserverActor {
         let actor = Self {
             receiver: rx,
             broadcaster,
+            history: HashMap::new(),
         };
         let handle = VoteObserverHandle { sender: tx };
         (actor, handle)
@@ -36,6 +40,10 @@ impl VoteObserverActor {
                     team_name,
                     current_count,
                 } => {
+                    if self.is_spam(&team_name) {
+                        println!("⚠️ SPAM DETECTED: {}チームへの投票が多すぎます。通知をスキップします", team_name);
+                        continue;
+                    }
                     println!(
                         "Actor: {}チームに票が入りました。（現在{}票)",
                         team_name, current_count
@@ -54,6 +62,19 @@ impl VoteObserverActor {
                 }
             }
         }
+    }
+    fn is_spam(&mut self, team_name: &str) -> bool {
+        let now = Instant::now();
+        let window = Duration::from_secs(10);
+        let limit = 5;
+
+        let timestamps = self.history.entry(team_name.to_string()).or_insert(Vec::new());
+
+        timestamps.push(now);
+
+        timestamps.retain(|&t| now.duration_since(t) < window);
+
+        timestamps.len() > limit
     }
 }
 

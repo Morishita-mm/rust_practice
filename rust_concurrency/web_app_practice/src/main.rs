@@ -1,71 +1,16 @@
+mod handlers;
+mod models;
+mod repositories;
+
 use axum::{
-    Json, Router,
-    extract::State,
-    http::StatusCode,
+    Router,
     routing::{get, post},
 };
-use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
 
-#[derive(Clone)]
-struct AppState {
-    pool: sqlx::PgPool,
-}
-
-// ユーザーから送信されてくるJSON：{"team_name": "A"}
-#[derive(Deserialize)]
-struct CreateVote {
-    team_name: String,
-}
-
-#[derive(FromRow, Debug, Serialize)]
-struct TeamVote {
-    team_name: String,
-    count: i32,
-}
-
-// 投票用ハンドラ(POST /vote)
-async fn cast_vote(
-    // 共有状態を注入（Springの@Autowiredに近い感覚）
-    State(state): State<AppState>,
-    // JSONボディを受け取る（Springの@RequestBody）
-    Json(payload): Json<CreateVote>,
-) -> Result<(StatusCode, String), (StatusCode, String)> {
-    let result = sqlx::query!(
-        "INSERT INTO votes (team_name, count) VALUES ($1, 1)
-        ON CONFLICT (team_name)
-        DO UPDATE SET count = votes.count + 1",
-        payload.team_name
-    )
-    .execute(&state.pool)
-    .await;
-
-    match result {
-        Ok(_) => Ok((StatusCode::OK, format!("Voted for {}", payload.team_name))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Database error: {}", e),
-        )),
-    }
-}
-
-// 集計確認用ハンドラ（GET /votes）
-async fn get_votes(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<TeamVote>>, (StatusCode, String)> {
-    // DBから全てのデータを取得
-    let votes = sqlx::query_as!(TeamVote, "SELECT team_name, count FROM votes")
-        .fetch_all(&state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok(Json(votes))
-}
+use crate::repositories::{VoteRepository, VoteRepositoryForDb};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -80,13 +25,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connected to Database!");
 
-    let shared_state = AppState { pool };
+    let repo = VoteRepositoryForDb::new(pool);
+    let app_state: Arc<dyn VoteRepository> = Arc::new(repo);
 
     let app = Router::new()
-        .route("/vote", post(cast_vote)) // POST /vote -> cast_vote関数へマッピング
-        .route("/votes", get(get_votes)) // GET /votes -> get_votes関数へマッピング
-        .with_state(shared_state);
+        .route("/vote", post(handlers::cast_vote)) // POST /vote -> cast_vote関数へマッピング
+        .route("/votes", get(handlers::get_votes)) // GET /votes -> get_votes関数へマッピング
+        .with_state(app_state);
 
+    let _addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
     println!("Listening on 0.0.0.0:8080");
     axum::serve(listener, app)

@@ -1,11 +1,11 @@
 use crate::packet::TCPPacket;
 use crate::tcpflags;
 use anyhow::{Context, Result};
-use pnet::packet::{ip::IpNextHeaderProtocols, Packet, tcp::TcpPacket};
+use pnet::packet::{Packet, ip::IpNextHeaderProtocols, tcp::TcpPacket};
 use pnet::transport::{self, TransportChannelType, TransportProtocol, TransportSender};
 use pnet::util;
 use std::collections::VecDeque;
-use std::fmt::{self, Display, Debug};
+use std::fmt::{self, Debug, Display};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::SystemTime;
 
@@ -23,6 +23,8 @@ pub struct Socket {
     pub send_param: SendParam,
     pub recv_param: RecvParam,
     pub status: TcpStatus,
+    pub connected_connection_queue: VecDeque<SockID>,
+    pub listening_socket: Option<SockID>,
     pub sender: TransportSender,
 }
 
@@ -101,6 +103,8 @@ impl Socket {
                 tail: 0,
             },
             status,
+            connected_connection_queue: VecDeque::new(),
+            listening_socket: None,
             sender,
         })
     }
@@ -149,7 +153,7 @@ impl Socket {
 }
 
 impl Debug for TCPPacket {
-    fn fmt(&self, f: &mut fmt::Formatter<>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             r"

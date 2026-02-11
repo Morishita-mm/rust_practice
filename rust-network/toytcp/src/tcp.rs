@@ -2,9 +2,9 @@ use crate::packet::TCPPacket;
 use crate::socket::{SockID, Socket, TcpStatus};
 use crate::tcpflags;
 use anyhow::{Context, Result};
-use pnet::packet::{ip::IpNextHeaderProtocols, tcp::TcpPacket, Packet};
+use pnet::packet::{Packet, ip::IpNextHeaderProtocols, tcp::TcpPacket};
 use pnet::transport::{self, TransportChannelType};
-use rand::{rngs::ThreadRng, Rng};
+use rand::{Rng, rngs::ThreadRng};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::process::Command;
@@ -67,9 +67,9 @@ impl TCP {
                 return Ok(local_port);
             }
         }
-        anyhow::bail!("no available port found."); 
+        anyhow::bail!("no available port found.");
     }
-    
+
     /// ターゲットに接続し、接続済みソケットのIDを返す
     pub fn connect(&self, addr: Ipv4Addr, port: u16) -> Result<SockID> {
         let mut rng = rand::thread_rng();
@@ -92,7 +92,7 @@ impl TCP {
         self.wait_event(sock_id, TCPEventKind::ConnectionCompleted);
         Ok(sock_id)
     }
-    
+
     fn receive_handler(&self) -> Result<()> {
         dbg!("begin recv thread");
         let (_, mut receiver) = transport::transport_channel(
@@ -146,6 +146,8 @@ impl TCP {
             }
             let sock_id = socket.get_sock_id();
             if let Err(error) = match socket.status {
+                TcpStatus::Listen => self.listen_handler(table, sock_id, &packet, remote_addr),
+                TcpStatus::SynRcvd => self.synrcvd_handler(table, sock_id, &packet),
                 TcpStatus::SynSent => self.syssent_handler(socket, &packet),
                 _ => {
                     dbg!("not implemented state");
@@ -154,7 +156,77 @@ impl TCP {
             } {
                 dbg!(error);
             }
-        }    
+        }
+    }
+
+    /// LISTEN状態のソケットに到着したパケットの処理
+    fn listen_handler(
+        &self,
+        mut table: RwLockWriteGuard<HashMap<SockID, Socket>>,
+        listening_socket_id: SockID,
+        packet: &TCPPacket,
+        remote_addr: Ipv4Addr,
+    ) -> Result<()> {
+        dbg!("listen handler");
+        if packet.get_flag() & tcpflags::ACK > 0 {
+            // 本来ならRSTをsendする
+            return Ok(());
+        }
+        let listening_socket = table.get_mut(&listening_socket_id).unwrap();
+        if packet.get_flag() & tcpflags::SYN > 0 {
+            // passive openの処理
+            // 後に接続済みソケットとなるソケットを新たに生成する
+            let mut connection_socket = Socket::new(
+                listening_socket.local_addr,
+                remote_addr,
+                listening_socket.local_port,
+                packet.get_src(),
+                TcpStatus::SynRcvd,
+            )?;
+            connection_socket.recv_param.next = packet.get_seq() + 1;
+            connection_socket.recv_param.initial_seq = packet.get_seq();
+            connection_socket.send_param.initial_seq = rand::thread_rng().gen_range(1..1 << 31);
+            connection_socket.send_param.window = packet.get_window_size();
+            connection_socket.send_tcp_packet(
+                connection_socket.send_param.initial_seq,
+                connection_socket.recv_param.next,
+                tcpflags::SYN | tcpflags::ACK,
+                &[],
+            )?;
+            connection_socket.send_param.next = connection_socket.send_param.initial_seq + 1;
+            connection_socket.send_param.unacked_seq = connection_socket.send_param.initial_seq;
+            connection_socket.listening_socket = Some(listening_socket.get_sock_id());
+            dbg!("status: listen -> ", &connection_socket.status);
+            table.insert(connection_socket.get_sock_id(), connection_socket);
+        }
+        Ok(())
+    }
+
+    /// SYNRCVD状態のソケットに到着したパケットの処理
+    fn synrcvd_handler(
+        &self,
+        mut table: RwLockWriteGuard<HashMap<SockID, Socket>>,
+        sock_id: SockID,
+        packet: &TCPPacket,
+    ) -> Result<()> {
+        dbg!("synrcvd handler");
+        let socket = table.get_mut(&sock_id).unwrap();
+
+        if packet.get_flag() & tcpflags::ACK > 0
+            && socket.send_param.unacked_seq <= packet.get_ack()
+            && packet.get_ack() <= socket.send_param.next
+        {
+            socket.recv_param.next = packet.get_seq();
+            socket.send_param.unacked_seq = packet.get_ack();
+            socket.status = TcpStatus::Established;
+            dbg!("status: synrcvd -> ", &socket.status);
+            if let Some(id) = socket.listening_socket {
+                let ls = table.get_mut(&id).unwrap();
+                ls.connected_connection_queue.push_back(sock_id);
+                self.publish_event(ls.get_sock_id(), TCPEventKind::ConnectionCompleted);
+            }
+        }
+        Ok(())
     }
 
     fn wait_event(&self, sock_id: SockID, kind: TCPEventKind) {
@@ -167,7 +239,7 @@ impl TCP {
                 }
             }
             // cvarがnotifyされるまでeventのロックを外して待機
-            event = cvar.wait(event).unwrap(); 
+            event = cvar.wait(event).unwrap();
         }
         dbg!(&event);
         *event = None;
@@ -215,6 +287,34 @@ impl TCP {
             }
         }
         Ok(())
+    }
+
+    /// リスイングソケットを生成してソケットIDを返す
+    pub fn listen(&self, loccal_addr: Ipv4Addr, local_port: u16) -> Result<SockID> {
+        let socket = Socket::new(
+            loccal_addr,
+            UNDETERMINED_IP_ADDR,
+            local_port,
+            UNDETERMINED_PORT,
+            TcpStatus::Listen,
+        )?;
+        let mut lock = self.sockets.write().unwrap();
+        let sock_id = socket.get_sock_id();
+        lock.insert(sock_id, socket);
+        Ok(sock_id)
+    }
+
+    /// 接続済みソケットが生成されるまで待機し、生成されたらそのIDを返す
+    pub fn accept(&self, sock_id: SockID) -> Result<SockID> {
+        self.wait_event(sock_id, TCPEventKind::ConnectionCompleted);
+
+        let mut table = self.sockets.write().unwrap();
+        Ok(table
+            .get_mut(&sock_id)
+            .context(format!("no such socket: {:?}", sock_id))?
+            .connected_connection_queue
+            .pop_front()
+            .context("no connected socket")?)
     }
 }
 

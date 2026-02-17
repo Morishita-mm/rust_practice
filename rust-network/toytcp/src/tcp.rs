@@ -301,6 +301,9 @@ impl TCP {
             // ACKが立っていないパケットは破棄
             return Ok(());
         }
+        if !packet.payload().is_empty() {
+            self.process_payload(socket, &packet)?;
+        }
         Ok(())
     }
 
@@ -476,6 +479,56 @@ impl TCP {
         socket.recv_buffer.copy_within(copy_size.., 0);
         socket.recv_param.window += copy_size as u16;
         Ok(copy_size)
+    }
+
+    /// パケットのペイロードを受信バッファにコピーする
+    fn process_payload(&self, socket: &mut Socket, packet: &TCPPacket) -> Result<()> {
+        let relative_seq = packet.get_seq().wrapping_sub(socket.recv_param.next);
+
+        // ウィンドウサイズ以上のオフセットを持つパケットは、バッファに収まらないため無視
+        if relative_seq >= socket.recv_param.window as u32 {
+            dbg!("packet out of window, discarding");
+            return Ok(());
+        }
+
+        // 書き込み開始位置の計算
+        // 現在の受信済みデータの末尾（バッファ内の位置）計算
+        let head = socket.recv_buffer.len() - socket.recv_param.window as usize;
+        let offset = head + relative_seq as usize;
+
+        // コピー範囲の決定
+        let payload = packet.payload();
+        let copy_size = cmp::min(payload.len(), socket.recv_buffer.len() - offset);
+
+        if copy_size > 0 {
+            socket.recv_buffer[offset..offset + copy_size].copy_from_slice(&payload[..copy_size]);
+
+            // 受信済みの最新位置(tail)をこうしん。ロス時の穴埋めを考慮してmaxをとるが、シーケンス番号の比較はwrapping_subの結果で判断する
+            let packet_end = packet.get_seq().wrapping_add(copy_size as u32);
+            if packet_end.wrapping_sub(socket.recv_param.tail) < (1 << 31) {
+                socket.recv_param.tail = packet_end;
+            }
+        }
+
+        // 期待している番号通りのパケットが来た場合、受信完了位置(next)を進める
+        if packet.get_seq() == socket.recv_param.next {
+            let advanced = socket.recv_param.tail.wrapping_sub(socket.recv_param.next);
+            socket.recv_param.next = socket.recv_param.tail;
+            socket.recv_param.window = socket.recv_param.window.saturating_sub(advanced as u16);
+        }
+
+        // ACK送信とイベント発行
+        if copy_size > 0 {
+            socket.send_tcp_packet(
+                socket.send_param.next,
+                socket.recv_param.next,
+                tcpflags::ACK,
+                &[],
+            )?;
+        }
+
+        self.publish_event(socket.get_sock_id(), TCPEventKind::DataArrived);
+        Ok(())
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::tcpflags;
-use pnet::packet::{ip::IpNextHeaderProtocols, tcp::TcpPacket, Packet};
+use pnet::packet::{Packet, ip::IpNextHeaderProtocols, tcp::TcpPacket};
 use pnet::util;
 
 use std::fmt::{self, Debug};
@@ -102,7 +102,7 @@ impl TCPPacket {
                 &local_addr,
                 &remote_addr,
                 IpNextHeaderProtocols::Tcp,
-        )
+            )
     }
 }
 

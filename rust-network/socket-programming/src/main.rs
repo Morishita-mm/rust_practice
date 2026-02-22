@@ -26,7 +26,7 @@ fn main() {
             }
             "client" => {
                 // TCPクライアントの呼び出し
-                todo!();
+                tcp_client::connect(address).unwrap_or_else(|e| error!("{}", e));
             }
             _ => {
                 missing_role();
@@ -35,7 +35,7 @@ fn main() {
         "udp" => match role {
             "server" => {
                 // UDPサーバの呼び出し
-                todo!();
+                udp_server::serve(address).unwrap_or_else(|e| error!("{}", e));
             }
             "client" => {
                 // UDPクライアントの呼び出し

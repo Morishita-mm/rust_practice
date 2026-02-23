@@ -39,7 +39,7 @@ fn main() {
             }
             "client" => {
                 // UDPクライアントの呼び出し
-                todo!();
+                udp_client::communicate(address).unwrap_or_else(|e| error!("{}", e));
             }
             _ => {
                 missing_role();
